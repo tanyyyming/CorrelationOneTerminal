@@ -4,33 +4,181 @@ import math
 import warnings
 from sys import maxsize
 import json
+import time
+
+build_pos = {
+    "turn 0": {
+        "wall": [
+            [0, 13],
+            [1, 13],
+            [2, 13],
+            [3, 13],
+            [4, 12],
+            [5, 11],
+            [6, 10],
+            [7, 10],
+            [8, 9],
+            [9, 9],
+            [10, 9],
+            [11, 9],
+            [13, 9],
+            [14, 9],
+            [16, 9],
+            [17, 9],
+            [18, 9],
+            [19, 9],
+            [20, 10],
+            [21, 10],
+            [22, 11],
+            [23, 12],
+            [24, 13],
+            [25, 13],
+            [26, 13],
+            [27, 13],
+            [1, 12],
+            [26, 12],
+        ],
+        "turret": [[3, 12], [24, 12], [7, 9], [20, 9], [12, 8], [15, 8]],
+    },
+    "turn 1": {
+        "wall": [[12, 9], [15, 9]],
+        "turret": [],
+    },
+    "turn 2": {
+        "wall": [[4, 11], [5, 10], [22, 10], [23, 11]],
+        "turret": [],
+    },
+    "turn 3": {
+        "wall": [],
+        "turret": [],
+    },
+}
+
+upgrade_pos = {
+    "turn 0": {
+        "wall": [],
+        "turret": [],
+    },
+    "turn 1": {
+        "wall": [[0, 13], [27, 13]],
+        "turret": [],
+    },
+    "turn 2": {
+        "wall": [],
+        "turret": [],
+    },
+    "turn 3": {
+        "wall": [[26, 13], [26, 12]],
+        "turret": [[7, 9]],
+    },
+}
+
+attack_hole_pos = {
+    "wall": {
+        "left_corner": [[0, 13], [1, 13], [1, 12]],
+        "right_corner": [[27, 13], [26, 13], [26, 12]],
+    },
+}
+
+# send spouts starting from round 4
+spout_attack_pos_with_number = {
+    "left": [([21, 7], 5), ([23, 9], 1000)],
+    "right": [([6, 7], 5), ([4, 9], 1000)],
+}
+
+# wall front layers
+wall_front_layers = (
+    [
+        [0, 13],
+        [1, 13],
+        [1, 12],
+        [26, 12],
+        [26, 13],
+        [27, 13],
+        [2, 13],
+        [3, 13],
+        [4, 12],
+        [23, 12],
+        [24, 13],
+        [25, 13],
+        [5, 11],
+        [6, 10],
+        [7, 10],
+        [20, 10],
+        [21, 10],
+        [22, 11],
+        [8, 9],
+        [9, 9],
+        [10, 9],
+        [11, 9],
+        [12, 9],
+        [13, 9],
+        [14, 9],
+        [15, 9],
+        [16, 9],
+        [17, 9],
+        [18, 9],
+        [19, 9],
+    ],  # layer 0
+    [
+        [4, 11],
+        [5, 10],
+        [6, 9],
+        [5, 12],
+        [6, 11],
+        [21, 11],
+        [22, 12],
+        [21, 9],
+        [22, 10],
+        [23, 11],
+        [8, 10],
+        [9, 10],
+        [10, 10],
+        [11, 10],
+        [12, 10],
+        [13, 10],
+        [14, 10],
+        [15, 10],
+        [16, 10],
+        [17, 10],
+        [18, 10],
+        [19, 10],
+        [20, 10],
+    ],  # layer 1
+)
+
+# vital turret positions
+vital_turret_pos = [
+    [3, 12],
+    [24, 12],
+    [7, 9],
+    [20, 9],
+    [12, 8],
+    [15, 8],
+    [9, 8],
+    [18, 8],
+]
+
+# support positions
+vitual_support_pos = [[8, 8], [19, 8]]
 
 
-"""
-Most of the algo code you write will be in this file unless you create new
-modules yourself. Start by modifying the 'on_turn' function.
+# SP left after each turn:
+# turn 0: 0
+# turn 1: 1
+# turn 2: 2
+# turn 4: 1.1
 
-Advanced strategy tips: 
-
-  - You can analyze action frames by modifying on_action_frame function
-
-  - The GameState.map object can be manually manipulated to create hypothetical 
-  board states. Though, we recommended making a copy of the map to preserve 
-  the actual current map state.
-"""
 
 class AlgoStrategy(gamelib.AlgoCore):
     def __init__(self):
         super().__init__()
-        seed = random.randrange(maxsize)
-        random.seed(seed)
-        gamelib.debug_write('Random seed: {}'.format(seed))
 
     def on_game_start(self, config):
-        """ 
-        Read in config and perform any initial setup here 
         """
-        gamelib.debug_write('Configuring your custom algo strategy...')
+        Read in config and perform any initial setup here
+        """
+        gamelib.debug_write("Configuring your custom algo strategy...")
         self.config = config
         global WALL, SUPPORT, TURRET, SCOUT, DEMOLISHER, INTERCEPTOR, MP, SP
         WALL = config["unitInformation"][0]["shorthand"]
@@ -53,164 +201,125 @@ class AlgoStrategy(gamelib.AlgoCore):
         game engine.
         """
         game_state = gamelib.GameState(self.config, turn_state)
-        gamelib.debug_write('Performing turn {} of your custom algo strategy'.format(game_state.turn_number))
-        game_state.suppress_warnings(True)  #Comment or remove this line to enable warnings.
+        gamelib.debug_write(
+            "Performing turn {} of your custom algo strategy".format(
+                game_state.turn_number
+            )
+        )
+        game_state.suppress_warnings(
+            True
+        )  # Comment or remove this line to enable warnings.
 
-        self.starter_strategy(game_state)
+        self.overall_strategy(game_state)
 
         game_state.submit_turn()
 
+    def overall_strategy(self, game_state):
+        # go through the predefined routine
+        self.predefined_routine(game_state)
 
-    """
-    NOTE: All the methods after this point are part of the sample starter-algo
-    strategy and can safely be replaced for your custom algo.
-    """
+        # fix defense
+        self.fix_defense_and_upgrade(game_state)
 
-    def starter_strategy(self, game_state):
-        """
-        For defense we will use a spread out layout and some interceptors early on.
-        We will place turrets near locations the opponent managed to score on.
-        For offense we will use long range demolishers if they place stationary units near the enemy's front.
-        If there are no stationary units to attack in the front, we will send Scouts to try and score quickly.
-        """
-        # First, place basic defenses
-        self.build_defences(game_state)
-        # Now build reactive defenses based on where the enemy scored
-        self.build_reactive_defense(game_state)
+        # remove low health defence for SP
+        self.remove_low_health_defence(game_state)
 
-        # If the turn is less than 5, stall with interceptors and wait to see enemy's base
-        if game_state.turn_number < 5:
-            self.stall_with_interceptors(game_state)
-        else:
-            # Now let's analyze the enemy base to see where their defenses are concentrated.
-            # If they have many units in the front we can build a line for our demolishers to attack them at long range.
-            if self.detect_enemy_unit(game_state, unit_type=None, valid_x=None, valid_y=[14, 15]) > 10:
-                self.demolisher_line_strategy(game_state)
-            else:
-                # They don't have many units in the front so lets figure out their least defended area and send Scouts there.
+        # attack if it's the right turn
+        self.spout_attack(game_state, "left")
 
-                # Only spawn Scouts every other turn
-                # Sending more at once is better since attacks can only hit a single scout at a time
-                if game_state.turn_number % 2 == 1:
-                    # To simplify we will just check sending them from back left and right
-                    scout_spawn_location_options = [[13, 0], [14, 0]]
-                    best_location = self.least_damage_spawn_location(game_state, scout_spawn_location_options)
-                    game_state.attempt_spawn(SCOUT, best_location, 1000)
+    def predefined_routine(self, game_state):
+        global build_pos, upgrade_pos
 
-                # Lastly, if we have spare SP, let's build some supports
-                support_locations = [[13, 2], [14, 2], [13, 3], [14, 3]]
-                game_state.attempt_spawn(SUPPORT, support_locations)
+        # predefined only up to turn 3
+        if game_state.turn_number >= 4:
+            return
+        turn_str = "turn {}".format(game_state.turn_number)
+        # build
+        game_state.attempt_spawn(WALL, build_pos[turn_str]["wall"])
+        game_state.attempt_spawn(TURRET, build_pos[turn_str]["turret"])
+        # upgrade
+        game_state.attempt_upgrade(upgrade_pos[turn_str]["wall"])
+        game_state.attempt_upgrade(upgrade_pos[turn_str]["turret"])
 
-    def build_defences(self, game_state):
-        """
-        Build basic defenses using hardcoded locations.
-        Remember to defend corners and avoid placing units in the front where enemy demolishers can attack them.
-        """
-        # Useful tool for setting up your base locations: https://www.kevinbai.design/terminal-map-maker
-        # More community tools available at: https://terminal.c1games.com/rules#Download
+    def spout_attack(self, game_state, attack_direction):
+        global attack_hole_pos, spout_attack_pos_with_number
 
-        # Place turrets that attack enemy units
-        turret_locations = [[0, 13], [27, 13], [8, 11], [19, 11], [13, 11], [14, 11]]
-        # attempt_spawn will try to spawn units if we have resources, and will check if a blocking unit is already there
-        game_state.attempt_spawn(TURRET, turret_locations)
-        
-        # Place walls in front of turrets to soak up damage for them
-        wall_locations = [[8, 12], [19, 12]]
-        game_state.attempt_spawn(WALL, wall_locations)
-        # upgrade walls so they soak more damage
-        game_state.attempt_upgrade(wall_locations)
+        # remove corner walls to prepare for attack
+        if game_state.turn_number % 4 == 3:
+            if attack_direction == "left":
+                game_state.attempt_remove(attack_hole_pos["wall"]["left_corner"])
+            elif attack_direction == "right":
+                game_state.attempt_remove(attack_hole_pos["wall"]["right_corner"])
 
-    def build_reactive_defense(self, game_state):
-        """
-        This function builds reactive defenses based on where the enemy scored on us from.
-        We can track where the opponent scored by looking at events in action frames 
-        as shown in the on_action_frame function
-        """
-        for location in self.scored_on_locations:
-            # Build turret one space above so that it doesn't block our own edge spawn locations
-            build_location = [location[0], location[1]+1]
-            game_state.attempt_spawn(TURRET, build_location)
+        # attack from corners
+        if game_state.turn_number >= 4 and game_state.turn_number % 4 == 0:
+            for pos, number in spout_attack_pos_with_number[attack_direction]:
+                game_state.attempt_spawn(SCOUT, pos, number)
 
-    def stall_with_interceptors(self, game_state):
-        """
-        Send out interceptors at random locations to defend our base from enemy moving units.
-        """
-        # We can spawn moving units on our edges so a list of all our edge locations
-        friendly_edges = game_state.game_map.get_edge_locations(game_state.game_map.BOTTOM_LEFT) + game_state.game_map.get_edge_locations(game_state.game_map.BOTTOM_RIGHT)
-        
-        # Remove locations that are blocked by our own structures 
-        # since we can't deploy units there.
-        deploy_locations = self.filter_blocked_locations(friendly_edges, game_state)
-        
-        # While we have remaining MP to spend lets send out interceptors randomly.
-        while game_state.get_resource(MP) >= game_state.type_cost(INTERCEPTOR)[MP] and len(deploy_locations) > 0:
-            # Choose a random deploy location.
-            deploy_index = random.randint(0, len(deploy_locations) - 1)
-            deploy_location = deploy_locations[deploy_index]
-            
-            game_state.attempt_spawn(INTERCEPTOR, deploy_location)
-            """
-            We don't have to remove the location since multiple mobile 
-            units can occupy the same space.
-            """
+        # do nothing if it's not the right turn to either attack or remove walls to prepare for attack
 
-    def demolisher_line_strategy(self, game_state):
-        """
-        Build a line of the cheapest stationary unit so our demolisher can attack from long range.
-        """
-        # First let's figure out the cheapest unit
-        # We could just check the game rules, but this demonstrates how to use the GameUnit class
-        stationary_units = [WALL, TURRET, SUPPORT]
-        cheapest_unit = WALL
-        for unit in stationary_units:
-            unit_class = gamelib.GameUnit(unit, game_state.config)
-            if unit_class.cost[game_state.MP] < gamelib.GameUnit(cheapest_unit, game_state.config).cost[game_state.MP]:
-                cheapest_unit = unit
+    def fix_defense_and_upgrade(self, game_state):
+        global wall_front_layers, vital_turret_pos, vitual_support_pos, attack_hole_pos
 
-        # Now let's build out a line of stationary units. This will prevent our demolisher from running into the enemy base.
-        # Instead they will stay at the perfect distance to attack the front two rows of the enemy base.
-        for x in range(27, 5, -1):
-            game_state.attempt_spawn(cheapest_unit, [x, 11])
+        # if there is a hole in the wall, fill it
+        for wall_pos in wall_front_layers[0]:
+            # when it's the attack turn, the holes are intentional
+            if game_state.turn_number % 4 == 0 and (
+                wall_pos in attack_hole_pos["wall"]["left_corner"]
+                or wall_pos in attack_hole_pos["wall"]["right_corner"]
+            ):
+                continue
+            # fill the wall
+            if not game_state.contains_stationary_unit(wall_pos):
+                game_state.attempt_spawn(WALL, wall_pos)
 
-        # Now spawn demolishers next to the line
-        # By asking attempt_spawn to spawn 1000 units, it will essentially spawn as many as we have resources for
-        game_state.attempt_spawn(DEMOLISHER, [24, 10], 1000)
+        # if there is a hole in the turret, fill it
+        for turret_pos in vital_turret_pos:
+            if not game_state.contains_stationary_unit(turret_pos):
+                game_state.attempt_spawn(TURRET, turret_pos)
 
-    def least_damage_spawn_location(self, game_state, location_options):
-        """
-        This function will help us guess which location is the safest to spawn moving units from.
-        It gets the path the unit will take then checks locations on that path to 
-        estimate the path's damage risk.
-        """
-        damages = []
-        # Get the damage estimate each path will take
-        for location in location_options:
-            path = game_state.find_path_to_edge(location)
-            damage = 0
-            for path_location in path:
-                # Get number of enemy turrets that can attack each location and multiply by turret damage
-                damage += len(game_state.get_attackers(path_location, 0)) * gamelib.GameUnit(TURRET, game_state.config).damage_i
-            damages.append(damage)
-        
-        # Now just return the location that takes the least damage
-        return location_options[damages.index(min(damages))]
+        # upgrade corner walls
+        game_state.attempt_upgrade(attack_hole_pos["wall"]["left_corner"])
+        game_state.attempt_upgrade(attack_hole_pos["wall"]["right_corner"])
 
-    def detect_enemy_unit(self, game_state, unit_type=None, valid_x = None, valid_y = None):
-        total_units = 0
-        for location in game_state.game_map:
-            if game_state.contains_stationary_unit(location):
-                for unit in game_state.game_map[location]:
-                    if unit.player_index == 1 and (unit_type is None or unit.unit_type == unit_type) and (valid_x is None or location[0] in valid_x) and (valid_y is None or location[1] in valid_y):
-                        total_units += 1
-        return total_units
-        
-    def filter_blocked_locations(self, locations, game_state):
-        filtered = []
-        for location in locations:
-            if not game_state.contains_stationary_unit(location):
-                filtered.append(location)
-        return filtered
+        # try to upgrade the turret
+        for turret_pos in vital_turret_pos:
+            if game_state.contains_stationary_unit(turret_pos):
+                game_state.attempt_upgrade([turret_pos])
 
+        # strengthen the wall with a second layer
+        for wall_pos in wall_front_layers[1]:
+            # the second layer does not contain any intentional holes for attack
+            if not game_state.contains_stationary_unit(wall_pos):
+                game_state.attempt_spawn(WALL, wall_pos)
+
+        # try to place support
+        for support_pos in vitual_support_pos:
+            if not game_state.contains_stationary_unit(support_pos):
+                game_state.attempt_spawn(SUPPORT, support_pos)
+
+    def remove_low_health_defence(self, game_state):
+        global wall_front_layers, vital_turret_pos, vitual_support_pos
+
+        remove_locations = []
+        for locations in [
+            wall_front_layers[0],
+            wall_front_layers[1],
+            vital_turret_pos,
+            vitual_support_pos,
+        ]:
+            for pos in locations:
+                if len(game_state.game_map[pos[0], pos[1]]) == 0:
+                    continue
+                if (
+                    game_state.game_map[pos[0], pos[1]][0].health
+                    <= game_state.game_map[pos[0], pos[1]][0].max_health / 2
+                ):
+                    remove_locations.append(pos)
+
+        if len(remove_locations) > 0:
+            game_state.attempt_remove(remove_locations)
+    
     def on_action_frame(self, turn_string):
         """
         This is the action frame of the game. This function could be called 
